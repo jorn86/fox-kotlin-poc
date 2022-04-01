@@ -19,6 +19,8 @@ repositories {
 dependencies {
     testImplementation(kotlin("test"))
     implementation(compose.desktop.currentOs)
+    implementation("com.h2database:h2:2.1.210")
+    implementation("org.slf4j:slf4j-simple:1.7.36")
 }
 
 tasks.test {
@@ -31,7 +33,7 @@ tasks.withType<KotlinCompile> {
 
 compose.desktop {
     application {
-        mainClass = "MainKt"
+        mainClass = "com.foxit.kotlin.MainKt"
         nativeDistributions {
             targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb)
             packageName = "fox-kotlin-poc"

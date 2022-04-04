@@ -1,24 +1,26 @@
 package com.foxit.kotlin
 
 import com.foxit.kotlin.app.App
+import com.foxit.kotlin.orm.ColumnMapper
 import com.foxit.kotlin.db.DatabaseService
-import org.slf4j.LoggerFactory
-
-private val log = LoggerFactory.getLogger("com.foxit.kotlin.Main")
+import com.foxit.kotlin.orm.TaskMapper
+import com.foxit.kotlin.db.createSchema
+import com.foxit.kotlin.dto.Column
+import com.foxit.kotlin.dto.Task
 
 fun main() {
-    val db = DatabaseService(
-        "jdbc:h2:mem:kotlin-poc" // Enable if you want a non-persistent, in memory db (instead of a file)
-    ).also { it.connect() }
+//    val db = DatabaseService() // persistent, file
+    val db = DatabaseService.inMemory("kotlin-poc") // in memory only, not persisted
+    db.connect()
+    db.createSchema() // first run only!
 
-    val two = db.connection {
-        it.createStatement().use { st ->
-            st.executeQuery("SELECT 2")
-            require(st.resultSet.next())
-            st.resultSet.getInt(1)
-        }
+    db.transaction {
+        val todo = ColumnMapper.insert(this, Column("TODO"))
+        val progress = ColumnMapper.insert(this, Column("In progress"))
+        TaskMapper.insert(this, Task(todo, "First task"))
+        TaskMapper.insert(this, Task(todo, "Second task", "With description"))
+        TaskMapper.insert(this, Task(progress, "Progress task", "With description"))
     }
-    log.info("Two is $two")
 
-    App.start()
+    App(db).start()
 }

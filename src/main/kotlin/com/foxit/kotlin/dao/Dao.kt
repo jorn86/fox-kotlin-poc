@@ -1,15 +1,12 @@
-package com.foxit.kotlin.orm
+package com.foxit.kotlin.dao
 
-import com.foxit.kotlin.db.DtoToStatement
-import com.foxit.kotlin.db.ResultSetToDto
-import com.foxit.kotlin.db.insert
-import com.foxit.kotlin.db.query
+import com.foxit.kotlin.db.*
 import com.foxit.kotlin.dto.Dto
 import java.sql.Connection
 import java.sql.PreparedStatement
 import java.sql.ResultSet
 
-abstract class DtoMapper<T: Dto>(
+abstract class Dao<T: Dto>(
     table: String,
     writeFields: List<String>,
     allFields: List<String> = listOf("*"),
@@ -24,23 +21,17 @@ abstract class DtoMapper<T: Dto>(
     abstract fun createFromResultSet(resultSet: ResultSet): T
     abstract fun toPreparedStatement(dto: T, statement: PreparedStatement)
 
-    val get: ResultSetToDto<T> get() = { createFromResultSet(this) }
-    val set: DtoToStatement<T> get() = ::toPreparedStatement
-
-    fun selectSingle(connection: Connection, id: Int) = connection.query(selectSingleStatement,
+    fun selectSingle(connection: Connection, id: Int) = connection.querySingle(selectSingleStatement,
         { setInt(1, id) }) { createFromResultSet(this) }
-        .single()
 
-    fun selectAll(connection: Connection) = connection.query(selectAllStatement)
-        { createFromResultSet(this) }
+    fun selectAll(connection: Connection) = connection.query(selectAllStatement) { createFromResultSet(this) }
 
     fun insert(connection: Connection, dto: T) = connection.insert(insertStatement,
         { toPreparedStatement(dto, this) }) { getInt(1) }
         .single()
 
-    fun update(connection: Connection, dto: T) = connection.prepareStatement(updateStatement)
-        .apply {
-            toPreparedStatement(dto, this)
-            setInt(parameterMetaData.parameterCount, dto.id)
-        }.executeUpdate()
+    fun update(connection: Connection, dto: T) = connection.update(updateStatement) {
+        toPreparedStatement(dto, this)
+        setInt(parameterMetaData.parameterCount, dto.id)
+    }
 }

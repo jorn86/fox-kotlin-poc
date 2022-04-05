@@ -9,7 +9,7 @@ class DbSchemaTest {
 
     @BeforeEach
     fun init(info: TestInfo) {
-        db = DatabaseService("jdbc:h2:mem:${info.testMethod};DB_CLOSE_DELAY=-1")
+        db = DatabaseService.inMemory(info.testMethod.get().name)
         db.connect()
     }
 

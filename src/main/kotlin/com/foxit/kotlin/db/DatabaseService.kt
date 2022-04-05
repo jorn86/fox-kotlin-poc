@@ -8,10 +8,9 @@ import javax.sql.DataSource
 
 typealias ParameterSetter = PreparedStatement.() -> Unit
 typealias ResultSetToDto<T> = ResultSet.() -> T
-typealias DtoToStatement<T> = (T, PreparedStatement) -> Unit
 
-class DatabaseService(
-    private val url: String = "jdbc:h2:./kotlin-poc",
+class DatabaseService private constructor(
+    private val url: String,
     private val user: String = "sa",
     private val password: String = "sa",
     private val debug: Boolean = false,
@@ -60,6 +59,9 @@ class DatabaseService(
     }
 
     companion object {
+        fun file(path: String, debug: Boolean = false) =
+            DatabaseService("jdbc:h2:$path", debug = debug)
+
         fun inMemory(name: String, debug: Boolean = false) =
             DatabaseService("jdbc:h2:mem:$name;DB_CLOSE_DELAY=-1", debug = debug)
     }
@@ -84,10 +86,10 @@ fun <T> Connection.insert(
 }
 
 /**
- * Executes an INSERT statement
- * @return the number of inserted rows
+ * Executes an INSERT or UPDATE statement
+ * @return the number of updated rows
  */
-fun Connection.insert(sql: String, setParameters: ParameterSetter = {}) =
+fun Connection.update(sql: String, setParameters: ParameterSetter = {}) =
     prepareStatement(sql).apply(setParameters).executeUpdate()
 
 /**

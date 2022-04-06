@@ -1,13 +1,13 @@
 package com.foxit.kotlin.app
 
 import androidx.compose.desktop.ui.tooling.preview.Preview
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.Button
 import androidx.compose.material.Text
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.runtime.*
 import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.ui.Alignment
@@ -48,17 +48,34 @@ class App(private val db: DatabaseService) {
         columns = remember { mutableStateListOf() }
         tasks = remember { mutableStateListOf() }
 
-        // Where to put this code so the clears aren't needed? Should only happen once not every redraw
-        db.connection {
-            columns.clear()
-            tasks.clear()
-            columns.addAll(ColumnDao.selectAll(this))
-            tasks.addAll(TaskDao.selectAll(this))
+        // Where to put this code so this check isn't needed? We want to init once, not every re-compose
+        if (columns.isEmpty()) {
+            db.connection {
+                columns.addAll(ColumnDao.selectAll(this))
+                tasks.addAll(TaskDao.selectAll(this))
+            }
         }
+
 
         // Doesn't show scrollbars or allow mousewheel/drag :( but at least it scrolls to the focused field
         Row(Modifier.padding(20.dp).horizontalScroll(rememberScrollState()),
             horizontalArrangement = Arrangement.spacedBy(20.dp)) {
+            var visible by remember { mutableStateOf(false) }
+            Window(title = "Popup", onCloseRequest = { visible = false }, visible = visible) {
+                window.size = Dimension(200, 100)
+                Column {
+                    Text("This is a popup")
+                    Button(onClick = { visible = false }) {
+                        Text("OK")
+                    }
+                }
+            }
+            Button({
+                visible = true
+            }) {
+                Image(Icons.Default.Warning, "")
+            }
+
             columns.sortedBy { it.index }.forEach {
                 TaskColumn(it, tasks.filter { task -> task.columnId == it.id })
             }

@@ -9,13 +9,14 @@ import javax.sql.DataSource
 typealias ParameterSetter = PreparedStatement.() -> Unit
 typealias ResultSetToDto<T> = ResultSet.() -> T
 
+private val log = LoggerFactory.getLogger(DatabaseService::class.java)
+
 class DatabaseService private constructor(
     private val url: String,
     private val user: String = "sa",
     private val password: String = "sa",
     private val debug: Boolean = false,
 ) {
-    private val log = LoggerFactory.getLogger(javaClass)
     private lateinit var dataSource: DataSource
 
     fun connect() {
@@ -79,7 +80,9 @@ fun <T> Connection.insert(
     handleResults: ResultSetToDto<T>,
 ): List<T> {
     val statement = prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)
-    val updated = statement.apply(setParameters).executeUpdate()
+    val updated = statement.apply(setParameters)
+        .also { log.debug("Executing query $it") }
+        .executeUpdate()
     val generatedIds = statement.generatedKeys.map(handleResults)
     require(updated == generatedIds.size)
     return generatedIds
@@ -90,7 +93,9 @@ fun <T> Connection.insert(
  * @return the number of updated rows
  */
 fun Connection.update(sql: String, setParameters: ParameterSetter = {}) =
-    prepareStatement(sql).apply(setParameters).executeUpdate()
+    prepareStatement(sql).apply(setParameters)
+        .also { log.debug("Executing query $it") }
+        .executeUpdate()
 
 /**
  * Queries a single record
@@ -108,6 +113,7 @@ fun <T> Connection.querySingle(
 fun <T> Connection.query(sql: String, setParameters: ParameterSetter = {}, map: ResultSetToDto<T>) =
     prepareStatement(sql)
         .apply(setParameters)
+        .also { log.debug("Executing query $it") }
         .executeQuery()
         .map(map)
 

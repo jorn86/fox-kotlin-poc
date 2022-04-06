@@ -1,13 +1,15 @@
 package com.foxit.kotlin.dto
 
+import com.foxit.kotlin.dao.magic.Id
+import com.foxit.kotlin.dao.magic.Write
 import java.time.Instant
 
 data class Column(
-    val index: Int,
-    val name: String,
-    override val id: Int = -1,
+    @Write val index: Int,
+    @Write val name: String,
+    @Id override val id: Int = -1,
     val created: Instant = Instant.now(),
-    val modified: Instant = Instant.now(),
+    @Write val modified: Instant = Instant.now(),
 ): Dto {
     fun update(
         index: Int = this.index,

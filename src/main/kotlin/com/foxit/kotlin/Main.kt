@@ -2,8 +2,8 @@ package com.foxit.kotlin
 
 import com.foxit.kotlin.app.App
 import com.foxit.kotlin.dao.ColumnDao
-import com.foxit.kotlin.db.DatabaseService
 import com.foxit.kotlin.dao.TaskDao
+import com.foxit.kotlin.db.DatabaseService
 import com.foxit.kotlin.db.createSchema
 import com.foxit.kotlin.dto.Column
 import com.foxit.kotlin.dto.Task

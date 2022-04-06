@@ -17,12 +17,12 @@ fun SubmittableTextField(
     modifier: Modifier = Modifier,
     singleLine: Boolean = true,
     placeholder: @Composable () -> Unit = {},
-    handle: (String, (String) -> Unit) -> Unit,
+    onSubmit: (String, (String) -> Unit) -> Unit,
 ) {
     val (value, setter) = remember { mutableStateOf(initialValue) }
     TextField(value, setter, modifier.onKeyEvent {
         if (it.key in listOf(Key.Enter, Key.NumPadEnter)) {
-            handle(value, setter)
+            onSubmit(value, setter)
         }
         false
     }, singleLine = singleLine, placeholder = placeholder)

@@ -16,14 +16,17 @@ import kotlin.reflect.full.*
 import kotlin.reflect.jvm.javaField
 
 object MagicDao {
-    fun <T: Dto> create(dto: KClass<T>): IDao<T> {
+    inline fun <reified T: Dto> create() = create(T::class)
+
+    @PublishedApi
+    internal fun <T: Dto> create(dto: KClass<T>): IDao<T> {
         require(dto.isData) { "DTO type must be a data class" }
 
         val table = dto.valueOf(Table::name) ?: CaseFormat.UPPER_CAMEL.to(CaseFormat.LOWER_UNDERSCORE, dto.simpleName!!)
 
-        val constructor = dto.constructors.singleOrNull { it.hasAnnotation<Write>() }
+        val constructor = dto.constructors.singleOrNull { it.hasAnnotation<Table>() }
             ?: dto.primaryConstructor
-            ?: throw IllegalArgumentException("DTO must have a single constructor annotated with @Write, or a primary constructor")
+            ?: throw IllegalArgumentException("DTO must have a single constructor annotated with @Table, or a primary constructor")
 
         val order = Ordering.explicit(constructor.parameters.map { it.name }).onResultOf(KProperty<*>::name)
         val props = dto.declaredMemberProperties.sortedWith(order)

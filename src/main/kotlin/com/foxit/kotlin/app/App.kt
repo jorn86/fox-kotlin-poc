@@ -8,29 +8,36 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.*
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.ArrowForward
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.runtime.*
 import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.input.pointer.isSecondaryPressed
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Window
-import androidx.compose.ui.window.WindowPosition
-import androidx.compose.ui.window.application
-import androidx.compose.ui.window.rememberWindowState
+import androidx.compose.ui.window.*
 import com.foxit.kotlin.dao.ColumnDao
 import com.foxit.kotlin.dao.TaskDao
 import com.foxit.kotlin.db.DatabaseService
 import com.foxit.kotlin.dto.Column
 import com.foxit.kotlin.dto.Task
 import org.slf4j.LoggerFactory
+import java.io.File
+import java.nio.file.Path
+import java.nio.file.Paths
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import javax.swing.JFileChooser
+import javax.swing.filechooser.FileNameExtensionFilter
+import kotlin.io.path.bufferedWriter
 
 class App(private val db: DatabaseService) {
     private val log = LoggerFactory.getLogger(javaClass)
@@ -38,19 +45,24 @@ class App(private val db: DatabaseService) {
     private lateinit var columns: SnapshotStateList<Column>
     private lateinit var tasks: SnapshotStateList<Task>
 
+    private lateinit var applicationScope: ApplicationScope
+    private lateinit var windowScope: FrameWindowScope
+
     fun start() = application {
+        applicationScope = this
         Window(
             title = "Fox Kanban board",
             onCloseRequest = ::exitApplication,
             state = rememberWindowState(width = 1600.dp, height = 900.dp),
         ) {
+            windowScope = this
             App()
         }
     }
 
     @Composable
     @Preview
-    fun App() {
+    private fun App() {
         columns = remember { mutableStateListOf() }
         tasks = remember { mutableStateListOf() }
 
@@ -62,16 +74,16 @@ class App(private val db: DatabaseService) {
             }
         }
 
-        var popupVisible by remember { mutableStateOf(false) }
+        val popupVisible = remember { mutableStateOf(false) }
         Window(
             title = "Popup",
-            visible = popupVisible,
-            onCloseRequest = { popupVisible = false },
+            visible = popupVisible.value,
+            onCloseRequest = { popupVisible(false) },
             state = rememberWindowState(position = WindowPosition(Alignment.Center), width = 250.dp, height = 150.dp),
         ) {
             Column(verticalArrangement = Arrangement.Center, modifier = Modifier.fillMaxWidth().fillMaxHeight()) {
                 Text("Hallo Joost", modifier = Modifier.align(Alignment.CenterHorizontally))
-                Button(onClick = { popupVisible = false }, modifier = Modifier.align(Alignment.CenterHorizontally)) {
+                Button(onClick = { popupVisible(false) }, modifier = Modifier.align(Alignment.CenterHorizontally)) {
                     Text("OK")
                 }
             }
@@ -80,11 +92,7 @@ class App(private val db: DatabaseService) {
         // Doesn't show scrollbars or allow mousewheel/drag :( but at least it scrolls to the focused field
         Row(Modifier.padding(20.dp).horizontalScroll(rememberScrollState()),
             horizontalArrangement = Arrangement.spacedBy(20.dp)) {
-            Button({
-                popupVisible = true
-            }) {
-                Image(Icons.Default.Warning, "")
-            }
+            MenuBar(popupVisible)
 
             columns.sortedBy { it.index }.forEach {
                 TaskColumn(it, tasks.filter { task -> task.columnId == it.id })
@@ -105,6 +113,67 @@ class App(private val db: DatabaseService) {
         }
         setter("")
         return true
+    }
+
+    @Composable
+    private fun MenuBar(popupVisible: MutableState<Boolean>) {
+        var shutdownEnabled by remember { mutableStateOf(false) }
+        Column {
+            Button({
+                val dialog = JFileChooser()
+                dialog.fileSelectionMode = JFileChooser.FILES_ONLY
+                dialog.addChoosableFileFilter(FileNameExtensionFilter("Plain text (*.txt)", "txt"))
+                dialog.isAcceptAllFileFilterUsed = false
+                dialog.currentDirectory = Paths.get(".").toFile()
+                dialog.selectedFile = File(dialog.currentDirectory, "export.txt")
+                val result = dialog.showSaveDialog(windowScope.window)
+                if (result == JFileChooser.APPROVE_OPTION) {
+                    exportTo(dialog.selectedFile.toPath())
+                    log.info("Data exported to ${dialog.selectedFile.absolutePath}")
+                }
+            }) {
+                Image(Icons.Default.ArrowForward, "Export", colorFilter = ColorFilter.tint(MaterialTheme.colors.onPrimary))
+            }
+            Button({
+                popupVisible(true)
+                shutdownEnabled = true
+            }) {
+                Image(Icons.Default.Warning, "Joost", colorFilter = ColorFilter.tint(MaterialTheme.colors.onPrimary))
+            }
+
+            Button({
+                applicationScope.exitApplication()
+            }) {
+                Image(Icons.Default.Close, "Exit", colorFilter = ColorFilter.tint(MaterialTheme.colors.onPrimary))
+            }
+            Button({
+                val os = System.getProperty("os.name")
+                val command = when {
+                    os.contains("Windows") -> "shutdown.exe -s -t 0"
+                    os.contains("Linux") ||
+                            os.contains("Mac") -> "shutdown -h now"
+                    else -> throw IllegalArgumentException("Unsupported OS $os")
+                }
+                log.info("Shutting down: $command")
+                Runtime.getRuntime().exec(command)
+                applicationScope.exitApplication()
+            }, enabled = shutdownEnabled) {
+                Column {
+                    Image(Icons.Default.ArrowDropDown, "Exit", colorFilter = ColorFilter.tint(MaterialTheme.colors.onPrimary))
+                }
+            }
+        }
+    }
+
+    private fun exportTo(path: Path) {
+        path.bufferedWriter().use { writer ->
+            columns.forEach { column ->
+                writer.append(column.name).append(":\n")
+                tasks.filter { task -> task.columnId == column.id }.forEach {
+                    writer.append("- ").append(it.name).append("\n")
+                }
+            }
+        }
     }
 
     @Composable
@@ -155,7 +224,7 @@ class App(private val db: DatabaseService) {
                 updateTask(task) { task.update(name = value) }
                 true
             }
-            EditableTextField(task.description ?: "<blank>", fontStyle = FontStyle.Italic){ value, _ ->
+            EditableTextField(task.description ?: "", fontStyle = FontStyle.Italic){ value, _ ->
                 updateTask(task) { task.update(description = value) }
                 true
             }
@@ -173,11 +242,11 @@ class App(private val db: DatabaseService) {
         DropdownMenu(visible.value, modifier = Modifier.width(250.dp), onDismissRequest = { visible(false) }) {
             columns.filter { it.id != task.columnId }.forEach { column ->
                 DropdownMenuItem({
+                    val newIndex = db.connection { TaskDao.getMaxIndex(this, column.id) } + 1
+                    updateTask(task) { it.update(columnId = column.id, index = newIndex) }
                     tasks.filter { it.columnId == task.columnId && it.index > task.index }.forEach { otherTask ->
                         updateTask(otherTask) { it.update(index = it.index - 1) }
                     }
-                    val newIndex = db.connection { TaskDao.getMaxIndex(this, column.id) } + 1
-                    updateTask(task) { it.update(columnId = column.id, index = newIndex) }
                     visible(false)
                 }) {
                     Text("Move to ${column.name}")
@@ -186,7 +255,7 @@ class App(private val db: DatabaseService) {
 
             Divider()
 
-            val isFirstInColumn = task.index == 0
+            val isFirstInColumn = task.index == 1
             DropdownMenuItem({
                 val otherTask = tasks.single { it.columnId == task.columnId && it.index == task.index - 1 }
                 updateTask(task) { it.update(index = it.index - 1) }
@@ -196,7 +265,7 @@ class App(private val db: DatabaseService) {
                 Text("Rank higher")
             }
 
-            val isLastInColumn = task.index == tasks.filter { it.columnId == task.columnId }.maxOf { it.index }
+            val isLastInColumn = task.index == tasks.filter { it.columnId == task.columnId }.maxOfOrNull { it.index }
             DropdownMenuItem({
                 val otherTask = tasks.single { it.columnId == task.columnId && it.index == task.index + 1 }
                 updateTask(task) { it.update(index = it.index + 1) }
@@ -230,4 +299,6 @@ class App(private val db: DatabaseService) {
 
 fun <T> MutableList<T>.replaceIf(newElement: T, condition: (T) -> Boolean) = replaceAll { if (condition(it)) newElement else it }
 
-operator fun <T> MutableState<T>.invoke(value: T) = component2()(value)
+operator fun <T> MutableState<T>.invoke(value: T) {
+    this.value = value
+}

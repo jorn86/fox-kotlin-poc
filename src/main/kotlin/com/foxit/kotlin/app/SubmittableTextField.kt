@@ -7,9 +7,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.input.key.Key
-import androidx.compose.ui.input.key.key
-import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.input.key.*
 import androidx.compose.ui.unit.TextUnit
 
 @OptIn(ExperimentalComposeUiApi::class)
@@ -25,8 +23,9 @@ fun SubmittableTextField(
     val (value, setter) = remember { mutableStateOf(initialValue) }
     val style = if (fontSize != null) LocalTextStyle.current.copy(fontSize = fontSize) else LocalTextStyle.current
     TextField(value, setter, modifier.onKeyEvent {
-        if (it.key in listOf(Key.Enter, Key.NumPadEnter)) {
+        if (it.key in listOf(Key.Enter, Key.NumPadEnter) && it.type == KeyEventType.KeyUp) {
             onSubmit(value, setter)
+            return@onKeyEvent true
         }
         false
     }, textStyle = style, singleLine = singleLine, placeholder = placeholder)

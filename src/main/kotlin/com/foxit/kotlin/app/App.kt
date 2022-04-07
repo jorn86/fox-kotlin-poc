@@ -30,6 +30,7 @@ import com.foxit.kotlin.dto.Column
 import com.foxit.kotlin.dto.Task
 import org.slf4j.LoggerFactory
 import java.io.File
+import java.net.URL
 import java.nio.file.Path
 import java.nio.file.Paths
 import java.time.Instant
@@ -57,6 +58,7 @@ class App(private val db: DatabaseService) {
         ) {
             windowScope = this
             App()
+            getRandomQuote()
         }
     }
 
@@ -81,7 +83,7 @@ class App(private val db: DatabaseService) {
             state = rememberWindowState(position = WindowPosition(Alignment.Center), width = 250.dp, height = 150.dp),
         ) {
             Column(verticalArrangement = Arrangement.Center, modifier = Modifier.fillMaxWidth().fillMaxHeight()) {
-                Text("Hallo Joost", modifier = Modifier.align(Alignment.CenterHorizontally))
+                Text(getRandomQuote(), modifier = Modifier.align(Alignment.CenterHorizontally))
                 Button(onClick = { popupVisible(false) }, modifier = Modifier.align(Alignment.CenterHorizontally)) {
                     Text("OK")
                 }
@@ -193,13 +195,14 @@ class App(private val db: DatabaseService) {
     }
 
     private fun handleNewTask(columnId: Int, name: String, nameSetter: (String) -> Unit): Boolean {
-        if (name.trim().isBlank()) return false
+        val newName = name.trim()
+        if (newName.isBlank()) return false
+        nameSetter("")
         db.connection {
             val nextIndex = TaskDao.getMaxIndex(this, columnId) + 1
-            val id = TaskDao.insert(this, Task(columnId, nextIndex, name))
+            val id = TaskDao.insert(this, Task(columnId, nextIndex, newName, getRandomQuote()))
             tasks.add(TaskDao.selectSingle(this, id))
         }
-        nameSetter("")
         return true
     }
 
@@ -288,6 +291,11 @@ class App(private val db: DatabaseService) {
             TaskDao.update(this, updated)
         }
         tasks.replaceIf(updated) { it.id == task.id }
+    }
+
+    // Sure, we could have used a proper HTTP request library and JSON parser. But why?
+    private fun getRandomQuote() = URL("https://api.quotable.io/random").openStream().bufferedReader().use {
+        it.readText().substringAfter("\"content\":\"", "Quote not found").substringBefore("\"")
     }
 
     companion object {

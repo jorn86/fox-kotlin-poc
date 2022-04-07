@@ -2,10 +2,11 @@ package com.foxit.kotlin.app
 
 import androidx.compose.desktop.ui.tooling.preview.Preview
 import androidx.compose.foundation.*
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.Button
-import androidx.compose.material.Text
+import androidx.compose.material.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.runtime.*
@@ -13,18 +14,20 @@ import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.input.pointer.isSecondaryPressed
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Window
+import androidx.compose.ui.window.WindowPosition
 import androidx.compose.ui.window.application
+import androidx.compose.ui.window.rememberWindowState
 import com.foxit.kotlin.dao.ColumnDao
 import com.foxit.kotlin.dao.TaskDao
 import com.foxit.kotlin.db.DatabaseService
 import com.foxit.kotlin.dto.Column
 import com.foxit.kotlin.dto.Task
 import org.slf4j.LoggerFactory
-import java.awt.Dimension
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -36,8 +39,11 @@ class App(private val db: DatabaseService) {
     private lateinit var tasks: SnapshotStateList<Task>
 
     fun start() = application {
-        Window(title = "Fox Kanban board", onCloseRequest = ::exitApplication) {
-            window.size = Dimension(1600, 900) // Can't find Compose way to do this
+        Window(
+            title = "Fox Kanban board",
+            onCloseRequest = ::exitApplication,
+            state = rememberWindowState(width = 1600.dp, height = 900.dp),
+        ) {
             App()
         }
     }
@@ -56,22 +62,26 @@ class App(private val db: DatabaseService) {
             }
         }
 
+        var popupVisible by remember { mutableStateOf(false) }
+        Window(
+            title = "Popup",
+            visible = popupVisible,
+            onCloseRequest = { popupVisible = false },
+            state = rememberWindowState(position = WindowPosition(Alignment.Center), width = 250.dp, height = 150.dp),
+        ) {
+            Column(verticalArrangement = Arrangement.Center, modifier = Modifier.fillMaxWidth().fillMaxHeight()) {
+                Text("Hallo Joost", modifier = Modifier.align(Alignment.CenterHorizontally))
+                Button(onClick = { popupVisible = false }, modifier = Modifier.align(Alignment.CenterHorizontally)) {
+                    Text("OK")
+                }
+            }
+        }
 
         // Doesn't show scrollbars or allow mousewheel/drag :( but at least it scrolls to the focused field
         Row(Modifier.padding(20.dp).horizontalScroll(rememberScrollState()),
             horizontalArrangement = Arrangement.spacedBy(20.dp)) {
-            var visible by remember { mutableStateOf(false) }
-            Window(title = "Popup", onCloseRequest = { visible = false }, visible = visible) {
-                window.size = Dimension(200, 100)
-                Column {
-                    Text("This is a popup")
-                    Button(onClick = { visible = false }) {
-                        Text("OK")
-                    }
-                }
-            }
             Button({
-                visible = true
+                popupVisible = true
             }) {
                 Image(Icons.Default.Warning, "")
             }

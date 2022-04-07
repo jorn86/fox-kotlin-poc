@@ -66,8 +66,7 @@ class App(private val db: DatabaseService) {
         columns = remember { mutableStateListOf() }
         tasks = remember { mutableStateListOf() }
 
-        // Where to put this code so this check isn't needed? We want to init once, not every re-compose
-        if (columns.isEmpty()) {
+        LaunchedEffect(Unit) {
             db.connection {
                 columns.addAll(ColumnDao.selectAll(this))
                 tasks.addAll(TaskDao.selectAll(this))
@@ -150,8 +149,7 @@ class App(private val db: DatabaseService) {
                 val os = System.getProperty("os.name")
                 val command = when {
                     os.contains("Windows") -> "shutdown.exe -s -t 0"
-                    os.contains("Linux") ||
-                            os.contains("Mac") -> "shutdown -h now"
+                    os.contains("Linux") || os.contains("Mac") -> "shutdown -h now"
                     else -> throw IllegalArgumentException("Unsupported OS $os")
                 }
                 log.info("Shutting down: $command")

@@ -25,6 +25,7 @@ private fun initDb(db: DatabaseService) {
     db.transaction {
         val todo = ColumnDao.insert(this, Column(1,"TODO"))
         val progress = ColumnDao.insert(this, Column(2, "In progress"))
+        val review = ColumnDao.insert(this, Column(2, "In review"))
         TaskDao.insert(this, Task(todo, 2, "Second task", "With description",
             modified = Instant.now().minus(400, ChronoUnit.MINUTES)))
         TaskDao.insert(this, Task(todo, 1, "First task",

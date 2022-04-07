@@ -115,7 +115,9 @@ class App(private val db: DatabaseService) {
             .verticalScroll(rememberScrollState())
             .padding(10.dp)) {
             Text(column.name, fontSize = 24.sp)
-            tasks.sortedBy { it.index }.forEach { Task(it) }
+            tasks.sortedBy { it.index }.forEach {
+                Task(it)
+            }
 
             SubmittableTextField(modifier = Modifier.padding(top = 20.dp).fillMaxWidth(),
                 placeholder = { Text("Add task...", fontStyle = FontStyle.Italic) })
@@ -134,32 +136,75 @@ class App(private val db: DatabaseService) {
         return true
     }
 
+    @OptIn(ExperimentalFoundationApi::class)
     @Composable
     private fun Task(task: Task) {
+        val source = remember { MutableInteractionSource() }
+        val hovered by source.collectIsHoveredAsState()
+        val menuVisible = remember { mutableStateOf(false) }
         Column(modifier = Modifier
             .width(300.dp)
+            .hoverable(source)
+            .mouseClickable { if (buttons.isSecondaryPressed) menuVisible(true) }
             .padding(top = 5.dp)
-            .shadow(3.dp, shape = RoundedCornerShape(10.dp))
+            .shadow(3.dp, shape = RoundedCornerShape(if(hovered) 7.dp else 5.dp))
             .padding(10.dp),
             verticalArrangement = Arrangement.spacedBy(5.dp)
         ) {
-            var editDescription by remember { mutableStateOf(false) }
-            Text(task.name, fontSize = 20.sp)
-            if (editDescription) {
-                SubmittableTextField(task.description ?: "", singleLine = false) { value, _ ->
-                    val updated = task.update(description = value)
-                    db.connection {
-                        TaskDao.update(this, updated)
-                    }
-                    tasks.replaceAll { if (it.id != task.id) it else updated }
-                    editDescription = false
-                }
-            } else {
-                Text(task.description ?: "<blank>", fontStyle = FontStyle.Italic,
-                    modifier = Modifier.clickable { editDescription = true })
+            EditableTextField(task.name, fontSize = 20.sp){ value, _ ->
+                updateTask(task) { task.update(name = value) }
+                true
+            }
+            EditableTextField(task.description ?: "<blank>", fontStyle = FontStyle.Italic){ value, _ ->
+                updateTask(task) { task.update(description = value) }
+                true
             }
             DateField("Created: ", task.created)
             DateField("Last modified: ", task.modified)
+
+            Row(modifier = Modifier.fillMaxWidth()) {
+                TaskContextMenu(task, menuVisible)
+            }
+        }
+    }
+
+    @Composable
+    private fun TaskContextMenu(task: Task, visible: MutableState<Boolean>) {
+        DropdownMenu(visible.value, modifier = Modifier.width(250.dp), onDismissRequest = { visible(false) }) {
+            columns.filter { it.id != task.columnId }.forEach { column ->
+                DropdownMenuItem({
+                    tasks.filter { it.columnId == task.columnId && it.index > task.index }.forEach { otherTask ->
+                        updateTask(otherTask) { it.update(index = it.index - 1) }
+                    }
+                    val newIndex = db.connection { TaskDao.getMaxIndex(this, column.id) } + 1
+                    updateTask(task) { it.update(columnId = column.id, index = newIndex) }
+                    visible(false)
+                }) {
+                    Text("Move to ${column.name}")
+                }
+            }
+
+            Divider()
+
+            val isFirstInColumn = task.index == 0
+            DropdownMenuItem({
+                val otherTask = tasks.single { it.columnId == task.columnId && it.index == task.index - 1 }
+                updateTask(task) { it.update(index = it.index - 1) }
+                updateTask(otherTask) { it.update(index = it.index + 1) }
+                visible(false)
+            }, enabled = !isFirstInColumn) {
+                Text("Rank higher")
+            }
+
+            val isLastInColumn = task.index == tasks.filter { it.columnId == task.columnId }.maxOf { it.index }
+            DropdownMenuItem({
+                val otherTask = tasks.single { it.columnId == task.columnId && it.index == task.index + 1 }
+                updateTask(task) { it.update(index = it.index + 1) }
+                updateTask(otherTask) { it.update(index = it.index - 1) }
+                visible(false)
+            }, enabled = !isLastInColumn) {
+                Text("Rank lower")
+            }
         }
     }
 
@@ -170,7 +215,19 @@ class App(private val db: DatabaseService) {
             modifier = Modifier.align(Alignment.End))
     }
 
+    private fun updateTask(task: Task, update: (Task) -> Task) {
+        val updated = update(task)
+        db.connection {
+            TaskDao.update(this, updated)
+        }
+        tasks.replaceIf(updated) { it.id == task.id }
+    }
+
     companion object {
         private val DATETIME_FORMAT = DateTimeFormatter.ofPattern("d MMMM yyyy H:mm")
     }
 }
+
+fun <T> MutableList<T>.replaceIf(newElement: T, condition: (T) -> Boolean) = replaceAll { if (condition(it)) newElement else it }
+
+operator fun <T> MutableState<T>.invoke(value: T) = component2()(value)

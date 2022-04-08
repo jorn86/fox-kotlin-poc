@@ -1,3 +1,4 @@
+import org.jetbrains.compose.ExperimentalComposeLibrary
 import org.jetbrains.compose.compose
 import org.jetbrains.compose.desktop.application.dsl.TargetFormat
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
@@ -24,11 +25,13 @@ dependencies {
     implementation("org.slf4j:slf4j-simple:1.7.36")
     implementation("com.google.guava:guava:31.1-jre")
 
-    testImplementation(kotlin("test"))
+    @OptIn(ExperimentalComposeLibrary::class)
+    testImplementation(compose.uiTestJUnit4)
+    testImplementation(compose.uiTooling)
 }
 
 tasks.test {
-    useJUnitPlatform()
+    useJUnit()
 }
 
 tasks.withType<KotlinCompile> {

@@ -17,6 +17,7 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.input.pointer.isSecondaryPressed
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -108,7 +109,7 @@ class App(private val db: DatabaseService) {
                     TaskColumn(it, tasks.filter { task -> task.columnId == it.id })
                 }
 
-                SubmittableTextField(modifier = Modifier.width(300.dp),
+                SubmittableTextField(modifier = Modifier.width(300.dp).testTag("NewColumn"),
                     placeholder = { Text("Add column...", fontStyle = FontStyle.Italic) })
                 { name, setter -> handleNewColumn(name, setter) }
             }

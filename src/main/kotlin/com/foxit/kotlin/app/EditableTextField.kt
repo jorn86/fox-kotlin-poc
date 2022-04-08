@@ -21,12 +21,12 @@ fun EditableTextField(
     editable: Boolean = false,
     fontStyle: FontStyle? = null,
     fontSize: TextUnit = TextUnit.Unspecified,
-    onSubmit: (String, (String) -> Unit) -> Boolean,
+    onSubmit: (MutableState<String>) -> Boolean,
 ) {
     var edit by remember { mutableStateOf(editable) }
     if (edit) {
-        SubmittableTextField(text, singleLine = false, fontSize = fontSize, onSubmit = { value, setter ->
-            if (onSubmit(value, setter)) edit = false
+        SubmittableTextField(text, singleLine = false, fontSize = fontSize, onSubmit = { value ->
+            if (onSubmit(value)) edit = false
         })
     } else {
         Row(horizontalArrangement = Arrangement.spacedBy(5.dp), modifier = Modifier.clickable { edit = true }) {

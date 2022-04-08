@@ -35,6 +35,7 @@ import java.io.File
 import java.net.URL
 import java.nio.file.Path
 import java.nio.file.Paths
+import java.sql.Connection
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -84,12 +85,16 @@ class App(private val db: DatabaseService) {
         Window(
             title = "Popup",
             visible = popupVisible.value,
-            onCloseRequest = { popupVisible(false) },
+            onCloseRequest = {
+                popupVisible.value = false
+            },
             state = rememberWindowState(position = WindowPosition(Alignment.Center), width = 300.dp, height = 200.dp),
         ) {
             Column(verticalArrangement = Arrangement.Center, modifier = Modifier.fillMaxSize()) {
                 Text(getRandomQuote(), modifier = Modifier.align(Alignment.CenterHorizontally), textAlign = TextAlign.Center)
-                Button(onClick = { popupVisible(false) }, modifier = Modifier.align(Alignment.CenterHorizontally)) {
+                Button(onClick = {
+                    popupVisible.value = false
+                }, modifier = Modifier.align(Alignment.CenterHorizontally)) {
                     Text("OK")
                 }
             }
@@ -111,19 +116,19 @@ class App(private val db: DatabaseService) {
 
                 SubmittableTextField(modifier = Modifier.width(300.dp).testTag("NewColumn"),
                     placeholder = { Text("Add column...", fontStyle = FontStyle.Italic) })
-                { name, setter -> handleNewColumn(name, setter) }
+                { name -> handleNewColumn(name) }
             }
         }
     }
 
-    private fun handleNewColumn(name: String, setter: (String) -> Unit): Boolean {
-        if (name.trim().isBlank()) return false
+    private fun handleNewColumn(name: MutableState<String>): Boolean {
+        val newName = name.value.trim()
+        if (newName.isBlank()) return false
         db.connection {
             val nextIndex = (columns.maxOfOrNull { it.index } ?: 0) + 1
-            val id = ColumnDao.insert(this, Column(nextIndex, name.trim()))
-            columns.add(ColumnDao.selectSingle(this, id))
+            columns.add(ColumnDao.insertAndRequery(this, Column(nextIndex, newName)))
         }
-        setter("")
+        name.value = ""
         return true
     }
 
@@ -147,7 +152,7 @@ class App(private val db: DatabaseService) {
                 Image(Icons.Outlined.ImportExport, "Export", colorFilter = ColorFilter.tint(MaterialTheme.colors.onPrimary))
             }
             Button({
-                popupVisible(true)
+                popupVisible.value = true
                 shutdownEnabled = true
             }) {
                 Image(Icons.Outlined.Warning, "Quote", colorFilter = ColorFilter.tint(MaterialTheme.colors.onPrimary))
@@ -200,18 +205,18 @@ class App(private val db: DatabaseService) {
 
             SubmittableTextField(modifier = Modifier.padding(top = 20.dp).fillMaxWidth(),
                 placeholder = { Text("Add task...", fontStyle = FontStyle.Italic) })
-                { name, setter -> handleNewTask(column.id, name, setter) }
+                { name -> handleNewTask(column.id, name) }
         }
     }
 
-    private fun handleNewTask(columnId: Int, name: String, nameSetter: (String) -> Unit): Boolean {
-        val newName = name.trim()
+    private fun handleNewTask(columnId: Int, name: MutableState<String>): Boolean {
+        val newName = name.value.trim()
         if (newName.isBlank()) return false
-        nameSetter("")
+        name.value = ""
         db.connection {
             val nextIndex = TaskDao.getMaxIndex(this, columnId) + 1
-            val id = TaskDao.insert(this, Task(columnId, nextIndex, newName, getRandomQuote()))
-            tasks.add(TaskDao.selectSingle(this, id))
+            tasks.add(TaskDao.insertAndRequery(this,
+                Task(columnId, nextIndex, newName, getRandomQuote())))
         }
         return true
     }
@@ -225,18 +230,22 @@ class App(private val db: DatabaseService) {
         Column(modifier = Modifier
             .width(300.dp)
             .hoverable(source)
-            .mouseClickable { if (buttons.isSecondaryPressed) menuVisible(true) }
+            .mouseClickable {
+                if (buttons.isSecondaryPressed) {
+                    menuVisible.value = true
+                }
+            }
             .padding(top = 5.dp)
             .shadow(3.dp, shape = RoundedCornerShape(if(hovered) 7.dp else 5.dp))
             .padding(10.dp),
             verticalArrangement = Arrangement.spacedBy(5.dp)
         ) {
-            EditableTextField(task.name, fontSize = 20.sp){ value, _ ->
-                updateTask(task) { task.update(name = value) }
+            EditableTextField(task.name, fontSize = 20.sp) { name ->
+                db.connection { saveTask(this, task.update(name = name.value)) }
                 true
             }
-            EditableTextField(task.description ?: "", fontStyle = FontStyle.Italic){ value, _ ->
-                updateTask(task) { task.update(description = value) }
+            EditableTextField(task.description ?: "", fontStyle = FontStyle.Italic) { description ->
+                db.connection { saveTask(this, task.update(description = description.value)) }
                 true
             }
             DateField("Created: ", task.created)
@@ -250,15 +259,19 @@ class App(private val db: DatabaseService) {
 
     @Composable
     private fun TaskContextMenu(task: Task, visible: MutableState<Boolean>) {
-        DropdownMenu(visible.value, modifier = Modifier.width(250.dp), onDismissRequest = { visible(false) }) {
+        DropdownMenu(visible.value, modifier = Modifier.width(250.dp), onDismissRequest = {
+            visible.value = false
+        }) {
             columns.filter { it.id != task.columnId }.forEach { column ->
                 DropdownMenuItem({
-                    val newIndex = db.connection { TaskDao.getMaxIndex(this, column.id) } + 1
-                    updateTask(task) { it.update(columnId = column.id, index = newIndex) }
-                    tasks.filter { it.columnId == task.columnId && it.index > task.index }.forEach { otherTask ->
-                        updateTask(otherTask) { it.update(index = it.index - 1) }
+                    db.transaction {
+                        val newIndex = TaskDao.getMaxIndex(this, column.id) + 1
+                        saveTask(this, task.update(columnId = column.id, index = newIndex))
+                        tasks.filter { it.columnId == task.columnId && it.index > task.index }.forEach { otherTask ->
+                            saveTask(this, otherTask.update(index = otherTask.index - 1))
+                        }
                     }
-                    visible(false)
+                    visible.value = false
                 }) {
                     Text("Move to ${column.name}")
                 }
@@ -269,9 +282,11 @@ class App(private val db: DatabaseService) {
             val isFirstInColumn = task.index == 1
             DropdownMenuItem({
                 val otherTask = tasks.single { it.columnId == task.columnId && it.index == task.index - 1 }
-                updateTask(task) { it.update(index = it.index - 1) }
-                updateTask(otherTask) { it.update(index = it.index + 1) }
-                visible(false)
+                db.transaction {
+                    saveTask(this, task.update(index = task.index - 1))
+                    saveTask(this, otherTask.update(index = otherTask.index + 1))
+                }
+                visible.value = false
             }, enabled = !isFirstInColumn) {
                 Image(Icons.Outlined.ArrowUpward, "RankUp")
                 Text("Rank higher")
@@ -280,9 +295,11 @@ class App(private val db: DatabaseService) {
             val isLastInColumn = task.index == tasks.filter { it.columnId == task.columnId }.maxOfOrNull { it.index }
             DropdownMenuItem({
                 val otherTask = tasks.single { it.columnId == task.columnId && it.index == task.index + 1 }
-                updateTask(task) { it.update(index = it.index + 1) }
-                updateTask(otherTask) { it.update(index = it.index - 1) }
-                visible(false)
+                db.transaction {
+                    saveTask(this, task.update(index = task.index + 1))
+                    saveTask(this, otherTask.update(index = otherTask.index - 1))
+                }
+                visible.value = false
             }, enabled = !isLastInColumn) {
                 Image(Icons.Outlined.ArrowDownward, "RankDown")
                 Text("Rank lower")
@@ -297,12 +314,9 @@ class App(private val db: DatabaseService) {
             modifier = Modifier.align(Alignment.End))
     }
 
-    private fun updateTask(task: Task, update: (Task) -> Task) {
-        val updated = update(task)
-        db.connection {
-            TaskDao.update(this, updated)
-        }
-        tasks.replaceIf(updated) { it.id == task.id }
+    private fun saveTask(connection: Connection, task: Task) {
+        TaskDao.update(connection, task)
+        tasks.replaceWithIf(task) { it.id == task.id }
     }
 
     // Sure, we could have used a proper HTTP request library and JSON parser. But why?
@@ -315,8 +329,5 @@ class App(private val db: DatabaseService) {
     }
 }
 
-fun <T> MutableList<T>.replaceIf(newElement: T, condition: (T) -> Boolean) = replaceAll { if (condition(it)) newElement else it }
-
-operator fun <T> MutableState<T>.invoke(value: T) {
-    this.value = value
-}
+fun <T> MutableList<T>.replaceWithIf(newElement: T, condition: (T) -> Boolean) =
+    replaceAll { if (condition(it)) newElement else it }

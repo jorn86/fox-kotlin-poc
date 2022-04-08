@@ -8,18 +8,17 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.*
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowDropDown
-import androidx.compose.material.icons.filled.ArrowForward
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material.icons.outlined.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.input.pointer.isSecondaryPressed
 import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.*
@@ -28,6 +27,8 @@ import com.foxit.kotlin.dao.TaskDao
 import com.foxit.kotlin.db.DatabaseService
 import com.foxit.kotlin.dto.Column
 import com.foxit.kotlin.dto.Task
+import com.google.common.annotations.VisibleForTesting
+import kotlinx.coroutines.delay
 import org.slf4j.LoggerFactory
 import java.io.File
 import java.net.URL
@@ -43,9 +44,11 @@ import kotlin.io.path.bufferedWriter
 class App(private val db: DatabaseService) {
     private val log = LoggerFactory.getLogger(javaClass)
 
+    // Saving state like this is probably bad? But how else to do it...
     private lateinit var columns: SnapshotStateList<Column>
     private lateinit var tasks: SnapshotStateList<Task>
 
+    // Saving scopes may not be bad but I'm not sure
     private lateinit var applicationScope: ApplicationScope
     private lateinit var windowScope: FrameWindowScope
 
@@ -64,11 +67,12 @@ class App(private val db: DatabaseService) {
 
     @Composable
     @Preview
-    private fun App() {
+    @VisibleForTesting internal fun App() {
         columns = remember { mutableStateListOf() }
         tasks = remember { mutableStateListOf() }
 
         LaunchedEffect(Unit) {
+            delay(2000)
             db.connection {
                 columns.addAll(ColumnDao.selectAll(this))
                 tasks.addAll(TaskDao.selectAll(this))
@@ -80,10 +84,10 @@ class App(private val db: DatabaseService) {
             title = "Popup",
             visible = popupVisible.value,
             onCloseRequest = { popupVisible(false) },
-            state = rememberWindowState(position = WindowPosition(Alignment.Center), width = 250.dp, height = 150.dp),
+            state = rememberWindowState(position = WindowPosition(Alignment.Center), width = 300.dp, height = 200.dp),
         ) {
-            Column(verticalArrangement = Arrangement.Center, modifier = Modifier.fillMaxWidth().fillMaxHeight()) {
-                Text(getRandomQuote(), modifier = Modifier.align(Alignment.CenterHorizontally))
+            Column(verticalArrangement = Arrangement.Center, modifier = Modifier.fillMaxSize()) {
+                Text(getRandomQuote(), modifier = Modifier.align(Alignment.CenterHorizontally), textAlign = TextAlign.Center)
                 Button(onClick = { popupVisible(false) }, modifier = Modifier.align(Alignment.CenterHorizontally)) {
                     Text("OK")
                 }
@@ -91,17 +95,23 @@ class App(private val db: DatabaseService) {
         }
 
         // Doesn't show scrollbars or allow mousewheel/drag :( but at least it scrolls to the focused field
-        Row(Modifier.padding(20.dp).horizontalScroll(rememberScrollState()),
+        Row(Modifier.padding(20.dp).fillMaxSize().horizontalScroll(rememberScrollState()),
             horizontalArrangement = Arrangement.spacedBy(20.dp)) {
             MenuBar(popupVisible)
 
-            columns.sortedBy { it.index }.forEach {
-                TaskColumn(it, tasks.filter { task -> task.columnId == it.id })
-            }
+            if (columns.isEmpty()) {
+                Box(Modifier.fillMaxHeight().width(800.dp)) {
+                    CircularProgressIndicator(Modifier.scale(4f).align(Alignment.Center))
+                }
+            } else {
+                columns.sortedBy { it.index }.forEach {
+                    TaskColumn(it, tasks.filter { task -> task.columnId == it.id })
+                }
 
-            SubmittableTextField(modifier = Modifier.width(300.dp),
-                placeholder = { Text("Add column...", fontStyle = FontStyle.Italic) })
+                SubmittableTextField(modifier = Modifier.width(300.dp),
+                    placeholder = { Text("Add column...", fontStyle = FontStyle.Italic) })
                 { name, setter -> handleNewColumn(name, setter) }
+            }
         }
     }
 
@@ -133,19 +143,19 @@ class App(private val db: DatabaseService) {
                     log.info("Data exported to ${dialog.selectedFile.absolutePath}")
                 }
             }) {
-                Image(Icons.Default.ArrowForward, "Export", colorFilter = ColorFilter.tint(MaterialTheme.colors.onPrimary))
+                Image(Icons.Outlined.ImportExport, "Export", colorFilter = ColorFilter.tint(MaterialTheme.colors.onPrimary))
             }
             Button({
                 popupVisible(true)
                 shutdownEnabled = true
             }) {
-                Image(Icons.Default.Warning, "Joost", colorFilter = ColorFilter.tint(MaterialTheme.colors.onPrimary))
+                Image(Icons.Outlined.Warning, "Quote", colorFilter = ColorFilter.tint(MaterialTheme.colors.onPrimary))
             }
 
             Button({
                 applicationScope.exitApplication()
             }) {
-                Image(Icons.Default.Close, "Exit", colorFilter = ColorFilter.tint(MaterialTheme.colors.onPrimary))
+                Image(Icons.Outlined.Logout, "Exit", colorFilter = ColorFilter.tint(MaterialTheme.colors.onPrimary))
             }
             Button({
                 val os = System.getProperty("os.name")
@@ -159,7 +169,7 @@ class App(private val db: DatabaseService) {
                 applicationScope.exitApplication()
             }, enabled = shutdownEnabled) {
                 Column {
-                    Image(Icons.Default.ArrowDropDown, "Exit", colorFilter = ColorFilter.tint(MaterialTheme.colors.onPrimary))
+                    Image(Icons.Outlined.PowerSettingsNew, "Shutdown", colorFilter = ColorFilter.tint(MaterialTheme.colors.onPrimary))
                 }
             }
         }
@@ -178,8 +188,7 @@ class App(private val db: DatabaseService) {
 
     @Composable
     private fun TaskColumn(column: Column, tasks: Collection<Task>) {
-        Column(modifier = Modifier.width(300.dp)
-            .fillMaxHeight()
+        Column(modifier = Modifier.width(300.dp).fillMaxHeight()
             .shadow(2.dp, shape = RoundedCornerShape(5.dp))
             .verticalScroll(rememberScrollState())
             .padding(10.dp)) {
@@ -232,7 +241,7 @@ class App(private val db: DatabaseService) {
             DateField("Created: ", task.created)
             DateField("Last modified: ", task.modified)
 
-            Row(modifier = Modifier.fillMaxWidth()) {
+            Box(modifier = Modifier.fillMaxWidth()) {
                 TaskContextMenu(task, menuVisible)
             }
         }
@@ -263,6 +272,7 @@ class App(private val db: DatabaseService) {
                 updateTask(otherTask) { it.update(index = it.index + 1) }
                 visible(false)
             }, enabled = !isFirstInColumn) {
+                Image(Icons.Outlined.ArrowUpward, "RankUp")
                 Text("Rank higher")
             }
 
@@ -273,6 +283,7 @@ class App(private val db: DatabaseService) {
                 updateTask(otherTask) { it.update(index = it.index - 1) }
                 visible(false)
             }, enabled = !isLastInColumn) {
+                Image(Icons.Outlined.ArrowDownward, "RankDown")
                 Text("Rank lower")
             }
         }

@@ -8,4 +8,6 @@ interface IDao<T : Dto> {
     fun selectAll(connection: Connection): List<T>
     fun insert(connection: Connection, dto: T): Int
     fun update(connection: Connection, dto: T): Int
+
+    fun insertAndRequery(connection: Connection, dto: T) = selectSingle(connection, insert(connection, dto))
 }

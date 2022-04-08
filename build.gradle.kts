@@ -19,6 +19,7 @@ repositories {
 dependencies {
     implementation(kotlin("reflect"))
     implementation(compose.desktop.currentOs)
+    implementation(compose.materialIconsExtended)
     implementation("com.h2database:h2:2.1.210")
     implementation("org.slf4j:slf4j-simple:1.7.36")
     implementation("com.google.guava:guava:31.1-jre")

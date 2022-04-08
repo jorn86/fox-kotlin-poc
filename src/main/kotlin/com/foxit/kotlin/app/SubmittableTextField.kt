@@ -23,7 +23,7 @@ fun SubmittableTextField(
     val (value, setter) = remember { mutableStateOf(initialValue) }
     val style = if (fontSize != null) LocalTextStyle.current.copy(fontSize = fontSize) else LocalTextStyle.current
     TextField(value, setter, modifier.onKeyEvent {
-        if (it.key in listOf(Key.Enter, Key.NumPadEnter) && it.type == KeyEventType.KeyUp) {
+        if (it.key in listOf(Key.Enter, Key.NumPadEnter) && it.type == KeyEventType.KeyDown) {
             onSubmit(value, setter)
             return@onKeyEvent true
         }
